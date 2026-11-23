@@ -166,6 +166,8 @@ class OAuthSourceSerializer(SourceSerializer):
             "oidc_jwks_url",
             "oidc_jwks",
             "authorization_code_auth_method",
+            "nonce_enabled",
+            "acr_values",
         ]
         extra_kwargs = {
             "consumer_secret": {"write_only": True, "allow_blank": True, "required": False},

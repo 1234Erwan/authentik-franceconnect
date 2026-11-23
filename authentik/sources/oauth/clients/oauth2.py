@@ -3,6 +3,9 @@
 from json import loads
 from typing import Any
 from urllib.parse import parse_qsl
+from secrets import token_hex
+from jwt import PyJWTError
+from jwt import decode as jwt_decode
 
 from django.utils.crypto import constant_time_compare, get_random_string
 from django.utils.translation import gettext as _
@@ -25,6 +28,10 @@ SESSION_KEY_OAUTH_PKCE = "authentik/sources/oauth/pkce"
 
 class OAuth2Client(BaseOAuthClient):
     """OAuth2 Client"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.nonce_session_key = f"oauth-client-{self.source.name}-request-nonce"
 
     _default_headers = {
         "Accept": "application/json",
@@ -131,6 +138,8 @@ class OAuth2Client(BaseOAuthClient):
                 response=exc.response.text if exc.response is not None else str(exc),
             )
             return None
+        if not self.check_nonce(response.json()):
+            return {"error": "Invalid or missing nonce in ID token"}
         return response.json()
 
     def get_redirect_args(self) -> dict[str, str]:
@@ -158,6 +167,12 @@ class OAuth2Client(BaseOAuthClient):
             elif pkce_mode == PKCEMethod.S256:
                 args["code_challenge"] = pkce_s256_challenge(verifier)
             args["code_challenge_method"] = str(pkce_mode)
+        if self.source.nonce_enabled:
+            nonce = self.get_application_nonce()
+            args["nonce"] = nonce
+            self.request.session[self.nonce_session_key] = nonce
+        if self.source.acr_values:
+            args["acr_values"] = self.source.acr_values
         return args
 
     def parse_raw_token(self, raw_token: str) -> dict[str, Any]:
@@ -182,6 +197,31 @@ class OAuth2Client(BaseOAuthClient):
             headers["Authorization"] = f"{token['token_type']} {token['access_token']}"
             kwargs["headers"] = headers
         return super().do_request(method, url, **kwargs)
+
+    def get_application_nonce(self) -> str:
+        """Generate a nonce """
+        return token_hex(32)
+
+    def check_nonce(self, token: dict[str, Any]) -> bool:
+        """Verify that the nonce in the ID token matches the one sent in the authorize request."""
+        if not self.source.nonce_enabled:
+            return True
+        expected = self.request.session.pop(self.nonce_session_key, None)
+        id_token = token.get("id_token")
+        if not expected or not id_token:
+            self.logger.warning("Missing nonce or id_token while nonce check is enabled")
+            return False
+        try:
+            claims = jwt_decode(id_token, options={"verify_signature": False})
+        except PyJWTError as exc:
+            self.logger.warning("Unable to decode id_token", exc=exc)
+            return False
+        returned = claims.get("nonce")
+        if not isinstance(returned, str):
+            self.logger.warning("No nonce in id_token")
+            return False
+        return constant_time_compare(expected, returned)
+
 
     @property
     def session_key(self):

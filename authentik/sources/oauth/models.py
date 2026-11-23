@@ -79,6 +79,20 @@ class OAuthSource(NonCreatableType, Source):
             "How to perform authentication during an authorization_code token request flow"
         ),
     )
+    nonce_enabled = models.BooleanField(
+        default=False,
+        help_text=_(
+            "Send a random nonce in the authorization request and verify it "
+            "in the ID token returned by the token endpoint."
+        ),
+    )
+    acr_values = models.TextField(
+        blank=True,
+        default="",
+        help_text=_(
+            "Space-separated list of acr_values sent in the authorization request."
+        ),
+    )
 
     @property
     def source_type(self) -> type[SourceType]:

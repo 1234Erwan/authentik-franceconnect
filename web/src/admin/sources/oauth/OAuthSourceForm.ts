@@ -455,6 +455,22 @@ export class OAuthSourceForm extends BaseSourceForm<OAuthSource> {
                             )}
                         </p>
                     </ak-form-element-horizontal>
+                    <ak-switch-input
+                        name="nonceEnabled"
+                        label=${msg("Send nonce")}
+                        ?checked=${this.instance?.nonceEnabled ?? false}
+                        help=${msg(
+                            "Send a random nonce in the authorization request and verify it in the returned ID token.",
+                        )}
+                    ></ak-switch-input>
+                    <ak-text-input
+                        name="acrValues"
+                        label=${msg("ACR values")}
+                        value=${this.instance?.acrValues ?? ""}
+                        help=${msg(
+                            "Space-separated acr_values sent in the authorization request (e.g. eidas1 for FranceConnect).",
+                        )}
+                    ></ak-text-input>
                 </div>
             </ak-form-group>
             ${this.renderUrlOptions()}
